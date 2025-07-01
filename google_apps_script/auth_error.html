@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authentication Failed - Swimming CLB</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --background-color: #121212;
+      --surface-color: #1E1E1E;
+      --primary-color: #A7C7E7;
+      --text-primary: #EAEAEA;
+      --text-secondary: #A0A0A0;
+      --error-color: #FFAAA5;
+      --border-color: #3a3a3a;
+      --border-radius: 20px;
+    }
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--background-color);
+      color: var(--text-primary);
+      margin: 0;
+      padding: 2rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      text-align: center;
+    }
+    
+    .status-container {
+      background-color: var(--surface-color);
+      padding: 3rem 2.5rem;
+      border-radius: var(--border-radius);
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+    
+    .status-icon {
+      font-size: 5rem;
+      margin-bottom: 2rem;
+      color: var(--error-color);
+      animation: scaleIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    
+    @keyframes scaleIn {
+      from { transform: scale(0.5); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    
+    h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+    
+    p {
+      font-size: 1.1rem;
+      margin-bottom: 1.5rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+    
+    .error-details {
+      background-color: rgba(255, 170, 165, 0.1);
+      border-left: 4px solid var(--error-color);
+      color: var(--text-secondary);
+      padding: 1rem;
+      border-radius: 8px;
+      text-align: left;
+      font-size: 0.9rem;
+      margin-bottom: 2.5rem;
+      word-wrap: break-word;
+    }
+    
+    .retry-btn {
+      display: inline-block;
+      padding: 0.8rem 2rem;
+      background-color: transparent;
+      color: var(--primary-color);
+      text-decoration: none;
+      border-radius: 50px;
+      font-weight: 600;
+      border: 1px solid var(--primary-color);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .retry-btn:hover {
+      background-color: var(--primary-color);
+      color: var(--background-color);
+    }
+
+  </style>
+</head>
+<body>
+  <div class="status-container">
+    <div class="status-icon">
+      <i class="fas fa-times-circle"></i>
+    </div>
+    <h1>Authentication Failed</h1>
+    <p>Sorry, we couldn't connect your Strava account. Please try again.</p>
+    
+    <? if (typeof errorMessage !== 'undefined' && errorMessage) { ?>
+      <div class="error-details">
+        <strong>Details:</strong> <?= errorMessage ?>
+      </div>
+    <? } ?>
+
+    <button class="retry-btn" onclick="window.location.reload()">
+      <i class="fas fa-sync-alt"></i> Retry
+    </button>
+  </div>
+</body>
+</html>

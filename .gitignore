@@ -1,0 +1,19 @@
+# Node.js
+/node_modules
+/npm-debug.log
+/yarn-error.log
+
+# Cloudflare Wrangler
+/.wrangler
+/wrangler.toml.bak
+
+# macOS
+.DS_Store
+
+# Editor-specific
+.vscode/
+.idea/
+
+# Google Apps Script - clasp environment file
+# This file is user-specific and should not be committed.
+google_apps_script/.clasp.json
