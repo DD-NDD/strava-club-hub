@@ -93,9 +93,11 @@ function processActivitySyncQueue() {
  *
  * @param {string|number} userId The ID of the user to sync.
  * @param {boolean} [forceSync=false] - If true, ignores the last updated timestamp and syncs anyway.
+ * @param {boolean} [sheetLog=false] 
+ * @param {number} [daysToSync=3] - The default number of days to look back for activities.
  * @return {boolean} True if new activities were added, false otherwise.
  */
-function syncActivitiesForUser(userId, forceSync = false, sheetLog = false) {
+function syncActivitiesForUser(userId, forceSync = false, sheetLog = false, daysToSync = 3) {
   const user = DatabaseService.getUserData(userId); //
   if (!user) {
     debugLog(`User not found with ID: ${userId}. Skipping sync.`, 'WARNING', sheetLog); //
@@ -115,12 +117,23 @@ function syncActivitiesForUser(userId, forceSync = false, sheetLog = false) {
     }
   }
 
-  // Sync activities from the last 30 days.
-  const afterTimestamp = Math.floor((now.getTime() / 1000) - (30 * 24 * 60 * 60));
+  let actualDaysToSync;
+  // If the user has never been updated, it's their first sync. Fetch the last 30 days.
+  if (!user.lastUpdated) {
+    actualDaysToSync = 30;
+    debugLog(`First sync for new user ${userId}. Fetching last ${actualDaysToSync} days.`, 'INFO', true, sheetLog);
+  } else {
+    // For all other syncs, use the provided lookback period.
+    actualDaysToSync = daysToSync;
+    debugLog(`Routine sync for user ${userId}. Fetching last ${actualDaysToSync} days.`, 'INFO', true, sheetLog);
+  }
+
+  const lookbackSeconds = actualDaysToSync * 24 * 60 * 60;
+  const afterTimestamp = Math.floor((now.getTime() / 1000) - lookbackSeconds);
   const beforeTimestamp = Math.floor(now.getTime() / 1000);
   
   // Fetch only 'Swim' activities from Strava.
-  const newActivities = StravaService.getAthleteActivities(userId, afterTimestamp, beforeTimestamp); //
+  const newActivities = StravaService.getAthleteActivities(userId, afterTimestamp, beforeTimestamp);
 
   if (newActivities && newActivities.length > 0) {
     
@@ -131,17 +144,17 @@ function syncActivitiesForUser(userId, forceSync = false, sheetLog = false) {
     }));
 
     // 3. Robust duplicate check by normalizing all IDs to strings.
-    const allExistingActivities = SheetService.getDataAsObjects(SHEET_NAMES.ACTIVITIES); //
+    const allExistingActivities = SheetService.getDataAsObjects(SHEET_NAMES.ACTIVITIES);
     const existingActivityIds = new Set(allExistingActivities.map(a => String(a.id)));
     const activitiesToWrite = preparedActivities.filter(a => !existingActivityIds.has(String(a.id)));
 
     if (activitiesToWrite.length > 0) {
-      SheetService.appendObjects(SHEET_NAMES.ACTIVITIES, activitiesToWrite); //
-      debugLog(`Added ${activitiesToWrite.length} new activities for user ${userId}.`, 'INFO', sheetLog); //
+      SheetService.appendObjects(SHEET_NAMES.ACTIVITIES, activitiesToWrite);
+      debugLog(`Added ${activitiesToWrite.length} new activities for user ${userId}.`, 'INFO', sheetLog);
       
       // Update the user's lastUpdated timestamp in the database.
       const updatedUser = { ...user, lastUpdated: now.toISOString() };
-      DatabaseService.updateUserData(userId, updatedUser); //
+      DatabaseService.updateUserData(userId, updatedUser);
 
       ChallengeService.updateUserChallengeProgress(userId); // Update challenge progress for this user.
 
@@ -149,7 +162,7 @@ function syncActivitiesForUser(userId, forceSync = false, sheetLog = false) {
     }
   }
   
-  debugLog(`No new activities to add for user ${userId}.`, 'DEBUG', sheetLog); //
+  debugLog(`No new activities to add for user ${userId}.`, 'DEBUG', sheetLog);
   return false;
 }
 

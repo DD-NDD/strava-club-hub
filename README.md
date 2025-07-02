@@ -4,17 +4,7 @@ An all-in-one web application built on Google Apps Script and Google Sheets to c
 
 ---
 
-## Demo / Screenshots
-
-Below are some examples of the application's interface. You should replace these placeholder images with actual screenshots from your project.
-
-*(Tip: To add screenshots, upload them to your GitHub repository and then reference the URL here.)*
-
-**Hero Section with Top Performers:**
-![Hero Section](https://placehold.co/800x450/1E1E1E/A7C7E7?text=Hero%20Section%20Screenshot)
-
-**Community Hub & Leaderboard:**
-![Community Hub](https://placehold.co/800x450/1E1E1E/A7C7E7?text=Community%20Hub%20Screenshot)
+![Project Demo](./screenshots/project-demo.gif)
 
 ---
 
@@ -23,18 +13,8 @@ Below are some examples of the application's interface. You should replace these
 - **Full Strava Integration:** Secure OAuth2 authentication for members and real-time activity updates.
 - **Automated Activity Sync:** A fallback system with background triggers periodically syncs activity data for all authorized members.
 - **Optional Real-time Webhooks:** A secure Cloudflare Worker acts as a proxy to instantly receive events from Strava, triggering immediate data updates for a real-time experience.
-- **Rich Community & Management Suite:** Features dynamic leaderboards, a central dashboard with key club stats, a full event and challenge system with member registration, a hidden admin panel (F8) for manual imports, and data export capabilities.
+- **Rich Community & Management Suite:** Features dynamic leaderboards, a central dashboard with key club stats, a full event and challenge system with member registration.
 - **Customizable & Flexible:** Easily change the tracked sport from Swimming to Running, Cycling, etc., via a single configuration setting.
-
----
-
-## Security
-
-This project was designed with security in mind:
-
-- **Secret Management:** All sensitive keys (Client Secrets, API keys) are stored in Google's secure `PropertiesService` or Cloudflare's `Secrets`, never hardcoded in the source code.
-- **Secure Webhook Proxy:** The Cloudflare Worker acts as a gatekeeper. It hides the Google Apps Script web app URL from the public and authenticates all incoming webhook events with a shared secret, preventing unauthorized access.
-- **Least Privilege:** The Strava API scope is limited to `activity:read_all`, only requesting permission to read activities, not to create or modify them.
 
 ---
 
@@ -87,7 +67,7 @@ Follow these steps to set up and deploy your own instance of the club hub.
     * Copy the content of `appsscript.json` into the `appsscript.json` file in the editor.
 
 3.  **Set up Script Properties:**
-    * In the Apps Script editor, go to `Project Settings` (⚙️ icon).
+    * In the Apps Script editor, go to `Project Settings`.
     * Click `Edit script properties`.
     * Add the following properties:
         * `STRAVA_CLIENT_ID`: Your Client ID from Strava.
@@ -124,7 +104,7 @@ Follow these steps to set up and deploy your own instance of the club hub.
     * `setupWorkerUrl()` (if using webhooks)
     * `setupWebhookSecret()` (if using webhooks)
 3.  **Create Webhook Subscription:** Run the `createWebhookSubscription()` function from the GAS editor to tell Strava to start sending events to your Worker.
-4.  **Set up Triggers:** In the GAS editor, go to `Triggers` (⏰ icon) and create triggers for the following functions based on your setup:
+4.  **Set up Triggers:** In the GAS editor, go to `Triggers` and create triggers for the following functions based on your setup:
     * `processCommunityChallenges`: Time-driven, every hour.
     * **If using Webhooks:**
         * `monitorWebhookHealth`: Time-driven, every day.
@@ -139,7 +119,7 @@ Your application is now live!
 
 - **Problem:** After deploying the Google Apps Script Web App, you get a "Page Not Found" error from Google when trying to access it or send a POST request.
 - **Solution:** This almost always means there is an issue with your deployment settings.
-    1.  **Redeploy:** After ANY code change, you **must** create a new version of your deployment. Go to `Deploy > Manage deployments > Edit (pencil icon) > Version: New version > Deploy`. Just saving the project is not enough.
+    1.  **Redeploy:** After ANY code change, you **must** create a new version of your deployment. Go to `Deploy > Manage deployments > Edit Version: New version > Deploy`. Just saving the project is not enough.
     2.  **Check Permissions:** Ensure `Who has access` is set to `Anyone`. If it's set to `Anyone with a Google account`, anonymous requests from services like Cloudflare Workers or `curl` will be rejected.
     3.  **Check URL:** Ensure you are using the Web App URL ending in `/exec`, not `/dev`.
 

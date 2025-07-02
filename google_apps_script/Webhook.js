@@ -77,7 +77,8 @@ function processStravaEvent(payload) {
   }
 
   if (aspect_type === 'create' || aspect_type === 'update') {
-    const activitiesWereAdded = syncActivitiesForUser(owner_id, true, true); // forceSync = true, sheetLog = true
+    // We now specify a lookback of 1 day for webhook events for maximum efficiency.
+    const activitiesWereAdded = syncActivitiesForUser(owner_id, true, true, 1); // forceSync = true, sheetLog = true, daysToSync = 1
     if (activitiesWereAdded) {
       AppCache.invalidateActivityCaches(); //
       deleteTriggersByName('processActivitySyncQueue'); //
