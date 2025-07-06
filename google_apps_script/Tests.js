@@ -411,3 +411,109 @@ function manualTest_MigrateDateFormatsToISO_NoUI() {
   
   debugLog('--- Date Format Migration Finished (No UI) ---', 'INFO');
 }
+
+/**
+ * A manual test function to simulate a webhook event from Strava.
+ * This allows testing the event processing logic without needing the full webhook pipeline.
+ */
+function manualTest_WebhookEvent() {
+  // --- CONFIGURE YOUR TEST EVENT HERE ---
+
+  // 1. Set the user ID for the test.
+  const testUserId = '118783404';
+
+  // 2. Set the activity ID you want to test with.
+  const testActivityId = 15004044454; 
+
+  // 3. Set the type of event you want to simulate: 'create', 'update', or 'delete'.
+  const testAspectType = 'create';
+
+  // --- End of configuration ---
+
+
+  if (!testUserId) {
+    Logger.log('Please edit the manualTest_WebhookEvent function in Tests.js to provide a valid User ID.'); 
+    return;
+  }
+
+  const samplePayload = {
+    "object_type": "activity",
+    "object_id": testActivityId,
+    "aspect_type": testAspectType,
+    "updates": {},
+    "owner_id": testUserId,
+    "subscription_id": 99999,
+    "event_time": Math.floor(new Date().getTime() / 1000)
+  };
+
+  debugLog(`--- STARTING MANUAL WEBHOOK TEST (type: ${testAspectType}) for user: ${testUserId} ---`, 'INFO');
+  try {
+    processStravaEvent(samplePayload);
+    debugLog("--- MANUAL WEBHOOK TEST FINISHED ---", 'INFO');
+  } catch (e) {
+    debugLog(`--- MANUAL WEBHOOK TEST FAILED: ${e.message} ---`, 'ERROR');
+  }
+}
+
+
+/**
+ * A manual function to clean the Activities sheet of any disallowed entries.
+ * Can be run directly from the Apps Script editor.
+ */
+function manualCleanDisallowedActivities() {
+    debugLog('--- Starting manual cleanup of disallowed activities ---', 'INFO');
+    const result = SheetService.removeDisallowedActivities();
+    if (result.success) {
+      debugLog(`--- Cleanup successful. Removed ${result.removedCount} activities. ---`, 'INFO');
+    } else {
+      debugLog(`--- Cleanup failed: ${result.error} ---`, 'ERROR');
+    }
+}
+
+/**
+ * A manual test function to simulate a curl request from within Apps Script.
+ * It sends a POST request to the Cloudflare Worker proxy to test the full
+ * end-to-end webhook pipeline (Proxy -> GAS).
+ */
+function manualTest_SendRequestToProxy() {
+  // The URL of your Cloudflare Worker proxy.
+  const props = PropertiesService.getScriptProperties();
+  const proxyUrl = props.getProperty('CLOUDFLARE_WORKER_URL');
+
+  // The JSON payload you want to send, simulating a Strava event.
+  const payload = {
+    "object_type": "activity",
+    "object_id": 15004044454,
+    "aspect_type": "create",
+    "owner_id": 118783404
+  };
+
+  debugLog(`--- Sending POST request to proxy URL: ${proxyUrl} ---`, "INFO");
+
+  const options = {
+    'method': 'post',
+    'contentType': 'application/json',
+    'payload': JSON.stringify(payload),
+    'muteHttpExceptions': true // Important: Allows us to read the response even if it's an error status (like 4xx or 5xx).
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(proxyUrl, options);
+    const responseCode = response.getResponseCode();
+    const responseBody = response.getContentText();
+
+    // Log the direct response from the proxy worker.
+    debugLog(`Proxy responded with Status Code: ${responseCode}`, "INFO");
+    debugLog(`Proxy responded with Body: "${responseBody}"`, "INFO");
+
+    if (responseCode === 200) {
+      debugLog(`SUCCESS: The proxy received the request successfully (responded with "${responseBody}").`, "INFO");
+      debugLog("--> PLEASE CHECK the 'DebugLogs' sheet now to see if the request was forwarded and processed by your doPost function.", "INFO");
+    } else {
+      debugLog(`ERROR: The proxy returned an error status code: ${responseCode}. Check the Cloudflare Worker logs for more details.`, "INFO");
+    }
+
+  } catch (e) {
+    debugLog(`CRITICAL ERROR while sending request to proxy: ${e.message}`, "CRITICAL");
+  }
+}

@@ -64,29 +64,91 @@ function doPost(e) {
 }
 
 /**
- * Processes the validated Strava event data.
- * This function is defined in Webhook.js.
- * @param {Object} payload The Strava event object.
+ * Main router for processing validated Strava webhook events.
+ * @param {Object} payload The Strava event object from the webhook.
  */
 function processStravaEvent(payload) {
-  const { object_type, aspect_type, owner_id, object_id } = payload;
-  debugLog(`Processing event: owner=${owner_id}, type=${object_type}, aspect=${aspect_type}, object=${object_id}`, "INFO", true);
+  const { object_type, aspect_type, owner_id, object_id, updates } = payload;
+  debugLog(`Routing event: type=${object_type}, aspect=${aspect_type}, owner=${owner_id}`, "INFO", true);
 
-  if (object_type !== 'activity') {
-    return;
+  // Main switch to route based on the object type
+  switch (object_type) {
+    case 'activity':
+      handleActivityEvent(aspect_type, owner_id, object_id);
+      break;
+
+    case 'athlete':
+      handleAthleteEvent(aspect_type, owner_id, updates);
+      break;
+
+    default:
+      debugLog(`Received webhook for an unhandled object_type: "${object_type}"`, "WARNING", true);
+      break;
   }
+}
 
-  if (aspect_type === 'create' || aspect_type === 'update') {
-    // We now specify a lookback of 1 day for webhook events for maximum efficiency.
-    const activitiesWereAdded = syncActivitiesForUser(owner_id, true, true, 1); // forceSync = true, sheetLog = true, daysToSync = 1
-    if (activitiesWereAdded) {
-      AppCache.invalidateActivityCaches(); //
-      deleteTriggersByName('processActivitySyncQueue'); //
-      debugLog('Webhook processed. Manual sync trigger removed to prevent duplicates.', 'INFO', true);
-    }
-  } 
-  else if (aspect_type === 'delete') {
-    debugLog(`Activity ${object_id} was deleted for owner ${owner_id}. No action taken.`, "INFO", true);
+/**
+ * Handles all logic related to activity events (create, update, delete).
+ * @param {string} aspect_type The type of change (e.g., 'create').
+ * @param {string|number} owner_id The ID of the user.
+ * @param {string|number} object_id The ID of the activity.
+ */
+function handleActivityEvent(aspect_type, owner_id, object_id) {
+  // Nested switch for different activity aspects
+  switch (aspect_type) {
+    case 'update':
+      // For 'update', first delete the old record.
+      debugLog(`Update event for activity ${object_id}. Deleting existing entry.`, "INFO", true);
+      SheetService.deleteObjectById(SHEET_NAMES.ACTIVITIES, object_id, 'id');
+      // IMPORTANT: No 'break' here. We want to "fall through" to the 'create'
+      // case to re-add the activity with its new data.
+
+    case 'create':
+      // This block now handles both 'create' and 'update' (after deletion).
+      const accessToken = DatabaseService.getAccessToken(owner_id);
+      if (!accessToken) {
+        debugLog(`No access token for user ${owner_id}, cannot process activity ${object_id}.`, "ERROR", true);
+        return;
+      }
+
+      const singleActivity = StravaService.getActivityById(object_id, owner_id);
+      if (!singleActivity) {
+        debugLog(`Could not fetch details for activity ${object_id}.`, "WARNING", true);
+        return;
+      }
+
+      const wasActivityAdded = addSingleActivityToSheet(singleActivity);
+      if (wasActivityAdded) {
+        // Perform all post-addition tasks
+        DatabaseService.updateUserData(owner_id, { ...DatabaseService.getUserData(owner_id), lastUpdated: new Date().toISOString() });
+        ChallengeService.updateUserChallengeProgress(owner_id);
+        AppCache.invalidateActivityCaches();
+        deleteTriggersByName('processActivitySyncQueue');
+        debugLog(`Webhook for activity ${object_id} processed successfully.`, 'INFO', true);
+      }
+      break;
+
+    case 'delete':
+      SheetService.deleteObjectById(SHEET_NAMES.ACTIVITIES, object_id, 'id');
+      AppCache.invalidateActivityCaches();
+      break;
+
+    default:
+      debugLog(`Received unhandled aspect_type for activity: "${aspect_type}"`, "WARNING", true);
+      break;
+  }
+}
+
+/**
+ * Handles all logic related to athlete events (e.g., deauthorization).
+ * @param {string} aspect_type The type of change ('update').
+ * @param {string|number} owner_id The ID of the user.
+ * @param {Object} updates An object containing the changed fields.
+ */
+function handleAthleteEvent(aspect_type, owner_id, updates) {
+  if (aspect_type === 'update' && updates && updates.authorized === 'false') {
+    debugLog(`User ${owner_id} has deauthorized the application. Processing...`, "WARNING", true);
+    DatabaseService.deauthorizeUser(owner_id);
   }
 }
 

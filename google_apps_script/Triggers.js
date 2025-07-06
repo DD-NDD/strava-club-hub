@@ -88,81 +88,98 @@ function processActivitySyncQueue() {
 }
 
 /**
- * Syncs activities for a single user if they haven't been updated recently.
- * This is the final version incorporating all recent logic changes.
+ * Checks for duplicates and visibility settings, then adds a single
+ * activity to the sheet if it's new and has allowed privacy.
+ * @param {Object} activityObject The full activity object from Strava.
+ * @return {boolean} True if the activity was new and added, false otherwise.
+ */
+function addSingleActivityToSheet(activityObject) {
+  if (!activityObject || !activityObject.id) {
+    return false;
+  }
+
+  // Check if the activity's visibility is in the allowed list from Constants.
+  if (!STRAVA_SETTINGS.ALLOWED_VISIBILITY.includes(activityObject.visibility)) {
+    debugLog(`Skipping activity ${activityObject.id} due to privacy setting: "${activityObject.visibility}"`, "INFO");
+    return false;
+  }
+
+  const allExistingActivities = SheetService.getDataAsObjects(SHEET_NAMES.ACTIVITIES);
+  const existingActivityIds = new Set(allExistingActivities.map(a => String(a.id)));
+
+  if (existingActivityIds.has(String(activityObject.id))) {
+    debugLog(`Activity ${activityObject.id} already exists in the sheet. Skipping.`, "INFO");
+    return false;
+  }
+
+  const preparedActivity = {
+    ...activityObject,
+    athlete_id: activityObject.athlete ? activityObject.athlete.id : null
+  };
+
+  SheetService.appendObjects(SHEET_NAMES.ACTIVITIES, [preparedActivity]);
+  debugLog(`Added single new activity ${activityObject.id} to the sheet.`, "INFO");
+  return true;
+}
+
+/**
+ * Syncs activities for a single user.
+ * This function now fetches a list of activities and then uses the
+ * robust `addSingleActivityToSheet` helper for each one.
  *
  * @param {string|number} userId The ID of the user to sync.
- * @param {boolean} [forceSync=false] - If true, ignores the last updated timestamp and syncs anyway.
- * @param {boolean} [sheetLog=false] 
- * @param {number} [daysToSync=3] - The default number of days to look back for activities.
- * @return {boolean} True if new activities were added, false otherwise.
+ * @param {boolean} [forceSync=false] - If true, ignores the last updated timestamp.
+ * @param {boolean} [sheetLog=false] - If true, logs the activity to the sheet.
+ * @param {number} [daysToSync=3] - The default number of days to look back.
+ * @return {boolean} True if at least one new activity was added, false otherwise.
  */
 function syncActivitiesForUser(userId, forceSync = false, sheetLog = false, daysToSync = 3) {
-  const user = DatabaseService.getUserData(userId); //
+  const user = DatabaseService.getUserData(userId);
   if (!user) {
-    debugLog(`User not found with ID: ${userId}. Skipping sync.`, 'WARNING', sheetLog); //
+    debugLog(`User not found with ID: ${userId}. Skipping sync.`, 'WARNING', sheetLog);
     return false;
   }
 
   const now = new Date();
-  
-  // 1. Bypass update interval check if forceSync is enabled.
-  if (forceSync) {
-    debugLog(`Force sync enabled for user ${userId}. Bypassing update interval check.`, 'INFO', sheetLog); //
-  } else {
+
+  if (!forceSync) {
     const lastUpdated = user.lastUpdated ? new Date(user.lastUpdated) : null;
-    if (lastUpdated && (now - lastUpdated) / (1000 * 60 * 60) < ACTIVITY_QUEUE.UPDATE_INTERVAL_HOURS) { //
-      debugLog(`Skipping sync for user ${userId}, updated recently.`, 'DEBUG', sheetLog); //
+    if (lastUpdated && (now - lastUpdated) / (1000 * 60 * 60) < ACTIVITY_QUEUE.UPDATE_INTERVAL_HOURS) {
+      debugLog(`Skipping sync for user ${userId}, updated recently.`, 'DEBUG', sheetLog);
       return false;
     }
   }
 
-  let actualDaysToSync;
-  // If the user has never been updated, it's their first sync. Fetch the last 30 days.
-  if (!user.lastUpdated) {
-    actualDaysToSync = 30;
-    debugLog(`First sync for new user ${userId}. Fetching last ${actualDaysToSync} days.`, 'INFO', true, sheetLog);
-  } else {
-    // For all other syncs, use the provided lookback period.
-    actualDaysToSync = daysToSync;
-    debugLog(`Routine sync for user ${userId}. Fetching last ${actualDaysToSync} days.`, 'INFO', true, sheetLog);
-  }
+  let actualDaysToSync = !user.lastUpdated ? 30 : daysToSync;
+  debugLog(`Syncing for user ${userId}. Fetching last ${actualDaysToSync} days.`, 'INFO', sheetLog);
 
   const lookbackSeconds = actualDaysToSync * 24 * 60 * 60;
   const afterTimestamp = Math.floor((now.getTime() / 1000) - lookbackSeconds);
   const beforeTimestamp = Math.floor(now.getTime() / 1000);
-  
-  // Fetch only 'Swim' activities from Strava.
+
   const newActivities = StravaService.getAthleteActivities(userId, afterTimestamp, beforeTimestamp);
 
-  if (newActivities && newActivities.length > 0) {
-    
-    // 2. Prepare data to flatten the athlete_id from the nested object provided by Strava.
-    const preparedActivities = newActivities.map(activity => ({
-      ...activity,
-      athlete_id: activity.athlete ? activity.athlete.id : null
-    }));
+  if (!newActivities || newActivities.length === 0) {
+    debugLog(`No new activities found from Strava API for user ${userId}.`, 'DEBUG', sheetLog);
+    return false;
+  }
 
-    // 3. Robust duplicate check by normalizing all IDs to strings.
-    const allExistingActivities = SheetService.getDataAsObjects(SHEET_NAMES.ACTIVITIES);
-    const existingActivityIds = new Set(allExistingActivities.map(a => String(a.id)));
-    const activitiesToWrite = preparedActivities.filter(a => !existingActivityIds.has(String(a.id)));
-
-    if (activitiesToWrite.length > 0) {
-      SheetService.appendObjects(SHEET_NAMES.ACTIVITIES, activitiesToWrite);
-      debugLog(`Added ${activitiesToWrite.length} new activities for user ${userId}.`, 'INFO', sheetLog);
-      
-      // Update the user's lastUpdated timestamp in the database.
-      const updatedUser = { ...user, lastUpdated: now.toISOString() };
-      DatabaseService.updateUserData(userId, updatedUser);
-
-      ChallengeService.updateUserChallengeProgress(userId); // Update challenge progress for this user.
-
-      return true;
+  let activitiesWereAdded = false;
+  // Loop through each fetched activity and use the single-add helper function.
+  // This ensures both sync and webhook use the exact same validation rules.
+  for (const activity of newActivities) {
+    if (addSingleActivityToSheet(activity)) {
+      activitiesWereAdded = true;
     }
   }
-  
-  debugLog(`No new activities to add for user ${userId}.`, 'DEBUG', sheetLog);
+
+  // If any activity was successfully added, perform post-add tasks.
+  if (activitiesWereAdded) {
+    DatabaseService.updateUserData(userId, { ...user, lastUpdated: new Date().toISOString() });
+    ChallengeService.updateUserChallengeProgress(userId);
+    return true;
+  }
+
   return false;
 }
 

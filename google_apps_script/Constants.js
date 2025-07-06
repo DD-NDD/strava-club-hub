@@ -72,10 +72,19 @@ const ACTIVITY_QUEUE = {
  */
 const STRAVA_SETTINGS = {
   /**
-   * @description The type of activity to sync from Strava. Only activities of this type will be saved.
-   * @type {string}
+   * @description An array of activity types to sync from Strava.
+   * Only activities matching these types will be saved.
+   * Find possible values at: https://developers.strava.com/docs/reference/#api-models-ActivityType
+   * @type {Array<string>}
    */
-  ACTIVITY_TYPE_TO_SYNC: 'Swim'
+  ALLOWED_ACTIVITY_TYPES: ['Swim'],
+
+  /**
+   * @description An array of allowed visibility settings for activities to be synced.
+   * Strava's possible values are: 'everyone', 'followers_only', 'only_me'.
+   * @type {Array<string>}
+   */
+  ALLOWED_VISIBILITY: ['everyone', 'followers_only']
 };
 
 const PROPERTY_KEYS = {

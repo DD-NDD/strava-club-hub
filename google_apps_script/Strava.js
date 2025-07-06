@@ -63,13 +63,13 @@ class StravaService {
     return JSON.parse(response.getContentText());
   }
 
-  /**
+/**
    * Fetches a user's activities from Strava for a given period.
-   * It now filters for a specific activity type defined in constants.
+   * It now filters for an array of activity types defined in constants.
    * @param {string|number} userId The user's Strava ID.
    * @param {number} afterTimestamp A Unix timestamp for the start of the period.
    * @param {number} beforeTimestamp A Unix timestamp for the end of the period.
-   * @return {Array<Object>|null} An array of 'Swim' activities, or null on failure.
+   * @return {Array<Object>|null} An array of allowed activities, or null on failure.
    */
   static getAthleteActivities(userId, afterTimestamp, beforeTimestamp) {
     let accessToken = DatabaseService.getAccessToken(userId);
@@ -97,7 +97,6 @@ class StravaService {
     if (responseCode === 200) {
       activities = JSON.parse(response.getContentText());
     } else if (responseCode === 401) {
-      // Token expired or was revoked, try refreshing
       debugLog(`Received 401 for user ${userId}. Attempting one-time token refresh.`, 'INFO');
       const refreshed = this.refreshAccessToken(userId);
       if (refreshed) {
@@ -112,16 +111,69 @@ class StravaService {
         return null;
     }
     
-    // Filter activities to only include the desired type from constants.
+    // Filter activities to include any type present in the ALLOWED_ACTIVITY_TYPES array.
     if (activities && activities.length > 0) {
-      const swimActivities = activities.filter(activity => activity.type === STRAVA_SETTINGS.ACTIVITY_TYPE_TO_SYNC);
-      debugLog(`Fetched ${activities.length} total activities, filtered down to ${swimActivities.length} '${STRAVA_SETTINGS.ACTIVITY_TYPE_TO_SYNC}' activities for user ${userId}.`, 'DEBUG');
-      return swimActivities;
+      const allowedActivities = activities.filter(activity =>
+        STRAVA_SETTINGS.ALLOWED_ACTIVITY_TYPES.includes(activity.type)
+      );
+      debugLog(`Fetched ${activities.length} total activities, filtered down to ${allowedActivities.length} allowed types: [${STRAVA_SETTINGS.ALLOWED_ACTIVITY_TYPES.join(', ')}] for user ${userId}.`, 'DEBUG');
+      return allowedActivities;
     }
 
     return []; // Return an empty array if no activities were found
   }
-  
+
+/**
+   * Fetches a single activity by its ID and handles token refresh.
+   * The function now takes a userId to manage the authentication state.
+   * @param {string|number} activityId The ID of the activity to fetch.
+   * @param {string|number} userId The ID of the user who owns the activity.
+   * @return {Object|null} The activity object, or null on failure.
+   */
+  static getActivityById(activityId, userId) {
+    let accessToken = DatabaseService.getAccessToken(userId);
+    if (!accessToken) {
+      debugLog(`No access token for user ${userId}. Attempting refresh before API call.`, "WARNING");
+      const refreshed = this.refreshAccessToken(userId);
+      if(refreshed) {
+        accessToken = refreshed.accessToken;
+      } else {
+        debugLog(`Initial token refresh failed for user ${userId}. Cannot fetch activity ${activityId}.`, 'ERROR');
+        return null;
+      }
+    }
+
+    const apiUrl = `https://www.strava.com/api/v3/activities/${activityId}`;
+    const options = {
+      headers: { 'Authorization': 'Bearer ' + accessToken },
+      muteHttpExceptions: true
+    };
+
+    let response = UrlFetchApp.fetch(apiUrl, options);
+    let responseCode = response.getResponseCode();
+
+    // Handle token expiration during the API call
+    if (responseCode === 401) {
+      debugLog(`Received 401 for user ${userId} when fetching activity ${activityId}. Retrying after refresh.`, 'INFO');
+      const refreshed = this.refreshAccessToken(userId);
+      if (refreshed && refreshed.accessToken) {
+        // Retry the API call with the new token
+        options.headers['Authorization'] = 'Bearer ' + refreshed.accessToken;
+        response = UrlFetchApp.fetch(apiUrl, options);
+        responseCode = response.getResponseCode();
+      }
+    }
+
+    // Final check on the response
+    if (responseCode === 200) {
+      debugLog(`Successfully fetched activity ID: ${activityId}`, "INFO");
+      return JSON.parse(response.getContentText());
+    } else {
+      debugLog(`Failed to fetch activity ${activityId} after all attempts. Code: ${responseCode}`, 'ERROR');
+      return null;
+    }
+  }
+
   /**
    * Refreshes an expired access token using a refresh token.
    * @param {string|number} userId The user's ID.

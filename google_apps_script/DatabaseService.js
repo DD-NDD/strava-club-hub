@@ -141,4 +141,33 @@ class DatabaseService {
     const user = this.getUserData(userId);
     return user ? user.refreshToken : null;
   }
+
+  /**
+   * Deauthorizes a user by removing their access/refresh tokens and personal data.
+   * @param {string|number} userId The ID of the user to deauthorize.
+   * @return {boolean} True on success, false on failure.
+   */
+  static deauthorizeUser(userId) {
+    const user = this.getUserData(userId);
+    if (!user) {
+      debugLog(`Cannot deauthorize non-existent user with ID: ${userId}`, 'WARNING');
+      return false;
+    }
+
+    debugLog(`Deauthorizing user ${userId}. Clearing tokens and sensitive data.`, "INFO");
+
+    // Create a new object with only non-sensitive data.
+    // We keep the ID and name for historical records but remove everything else.
+    const deauthorizedUserData = {
+      firstname: user.firstname,
+      lastname: user.lastname,
+      profile: user.profile,
+      // All sensitive fields are intentionally omitted:
+      // accessToken, refreshToken, expiresAt, etc.
+      deauthorizedAt: new Date().toISOString() // Add a timestamp for the event
+    };
+
+    // Use the existing updateUserData function to overwrite the record.
+    return this.updateUserData(userId, deauthorizedUserData);
+  }
 }

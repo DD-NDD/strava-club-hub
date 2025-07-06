@@ -119,6 +119,41 @@ class SheetService {
   }
 
   /**
+   * Deletes a single row found by its ID.
+   *
+   * @param {string} sheetName The name of the sheet.
+   * @param {string|number} id The ID of the row to delete.
+   * @param {string} [idColumn='id'] The header name of the ID column.
+   * @return {{success: boolean, error?: string}}
+   */
+  static deleteObjectById(sheetName, id, idColumn = 'id') {
+    try {
+        const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+        if (!sheet) throw new Error(`Sheet "${sheetName}" not found.`);
+
+        const data = sheet.getDataRange().getValues();
+        const headers = data[0].map(h => String(h).trim());
+        const idColIndex = headers.indexOf(idColumn);
+        if (idColIndex === -1) throw new Error(`ID column "${idColumn}" not found in sheet "${sheetName}".`);
+
+        // Find the row index from bottom to top to avoid issues when deleting multiple rows.
+        for (let i = data.length - 1; i > 0; i--) {
+            if (String(data[i][idColIndex]) == String(id)) {
+                sheet.deleteRow(i + 1); // +1 because sheet rows are 1-indexed
+                debugLog(`Successfully deleted row with ID "${id}" from sheet "${sheetName}".`, "INFO");
+                return { success: true };
+            }
+        }
+
+        return { success: false, error: `Row with ID "${id}" not found.` };
+
+    } catch (error) {
+        debugLog(`Error in SheetService.deleteObjectById: ${error.message}`, 'ERROR');
+        return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Removes duplicate rows from a sheet based on a specific column.
    *
    * @param {string} sheetName The name of the sheet.
@@ -136,14 +171,13 @@ class SheetService {
   }
 
   /**
-   * Removes all activities that are not of type 'Swim' from the Activities sheet.
-   * It reads all data, filters it, and overwrites the sheet with the cleaned data.
-   * This is more efficient than deleting rows one by one.
+   * Removes all activities from the Activities sheet that are not in the
+   * ALLOWED_ACTIVITY_TYPES list in constants. This is more efficient than deleting rows one by one.
    *
    * @return {{success: boolean, removedCount: number, error?: string}} An object indicating success,
    * the number of rows removed, and an error message if one occurred.
    */
-  static removeNonSwimActivities() {
+  static removeDisallowedActivities() {
     const sheetName = SHEET_NAMES.ACTIVITIES;
     try {
       const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
@@ -164,34 +198,28 @@ class SheetService {
         throw new Error("A 'type' column is required in the Activities sheet.");
       }
 
-      // Keep the header row and all rows where the type is 'Swim'.
-      const swimActivities = allData.filter((row, index) => {
-        return index === 0 || row[typeColumnIndex] === STRAVA_SETTINGS.ACTIVITY_TYPE_TO_SYNC;
+      // Keep the header row and all rows where the type is in the allowed list.
+      const filteredActivities = allData.filter((row, index) => {
+        return index === 0 || STRAVA_SETTINGS.ALLOWED_ACTIVITY_TYPES.includes(row[typeColumnIndex]);
       });
 
       const originalRowCount = allData.length;
-      const finalRowCount = swimActivities.length;
+      const finalRowCount = filteredActivities.length;
       const removedCount = originalRowCount - finalRowCount;
 
       if (removedCount > 0) {
-        // Clear the entire sheet first.
         sheet.clearContents();
-        
-        // Write the filtered data (headers + swim activities) back to the sheet.
-        sheet.getRange(1, 1, swimActivities.length, headers.length).setValues(swimActivities);
-        
-        debugLog(`Successfully removed ${removedCount} non-swim activities.`, 'INFO');
-        
-        // Since activities were removed, it's crucial to invalidate caches.
+        sheet.getRange(1, 1, filteredActivities.length, headers.length).setValues(filteredActivities);
+        debugLog(`Successfully removed ${removedCount} disallowed activities.`, 'INFO');
         AppCache.invalidateActivityCaches();
       } else {
-        debugLog('No non-swim activities found to remove.', 'INFO');
+        debugLog('No disallowed activities found to remove.', 'INFO');
       }
 
       return { success: true, removedCount: removedCount };
 
     } catch (error) {
-      debugLog(`Error in SheetService.removeNonSwimActivities: ${error.message}`, 'ERROR');
+      debugLog(`Error in SheetService.removeDisallowedActivities: ${error.message}`, 'ERROR');
       return { success: false, removedCount: 0, error: error.message };
     }
   }
