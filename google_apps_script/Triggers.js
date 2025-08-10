@@ -98,6 +98,12 @@ function addSingleActivityToSheet(activityObject) {
     return false;
   }
 
+  // Check if the activity type is in the allowed list from Constants ---
+  if (!STRAVA_SETTINGS.ALLOWED_ACTIVITY_TYPES.includes(activityObject.type)) {
+    debugLog(`Skipping activity ${activityObject.id} due to disallowed type: "${activityObject.type}"`, "INFO", true);
+    return false;
+  }
+
   // Check if the activity's visibility is in the allowed list from Constants.
   if (!STRAVA_SETTINGS.ALLOWED_VISIBILITY.includes(activityObject.visibility)) {
     debugLog(`Skipping activity ${activityObject.id} due to privacy setting: "${activityObject.visibility}"`, "INFO");
