@@ -41,6 +41,11 @@ function debugLog(message, level = 'INFO', writeToSheet = false) {
  * @param {string} [level='INFO'] The log level (e.g., INFO, DEBUG, ERROR).
  */
 function sheetLog(message, level = 'INFO') {
+  // If debug mode is off, do not log messages with the 'DEBUG' level.
+  if (!DEBUG_MODE && level === 'DEBUG') {
+    return; // Exit the function immediately, nothing is logged.
+  }
+  
   // Use LockService to prevent multiple simultaneous writes from corrupting the sheet.
   const lock = LockService.getScriptLock();
   lock.waitLock(15000); // Wait up to 15 seconds for other processes to finish.
