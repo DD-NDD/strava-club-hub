@@ -10,7 +10,7 @@
  *
  * @param {string|object} message The message or object to log.
  * @param {string} [level='INFO'] The log level (e.g., INFO, DEBUG, ERROR, CRITICAL).
- * @param {boolean} [writeToSheet=false] If true, the log will also be written to the 'DebugLogs' sheet.
+ * @param {boolean} [writeToSheet=false] If true, and if DEBUG_MODE is also true, the log will be written to the 'DebugLogs' sheet.
  */
 function debugLog(message, level = 'INFO', writeToSheet = false) {
   // First, always handle the standard Logger.log functionality (respecting DEBUG_MODE).
@@ -23,9 +23,9 @@ function debugLog(message, level = 'INFO', writeToSheet = false) {
     Logger.log(formattedMessage);
   }
 
-  // Second, if the 'writeToSheet' flag is true, call our robust sheet logging function.
-  // This provides a persistent and reliable log record.
-  if (writeToSheet === true) {
+  // Second, if the 'writeToSheet' flag is true AND DEBUG_MODE is on, call our robust sheet logging function.
+  // This provides a persistent and reliable log record only when needed.
+  if (writeToSheet === true && DEBUG_MODE) {
     // The sheetLog function handles its own timestamping and formatting.
     sheetLog(message, level);
   }
@@ -34,8 +34,8 @@ function debugLog(message, level = 'INFO', writeToSheet = false) {
 /**
  * Writes a log message to a dedicated Google Sheet named 'DebugLogs'.
  * This is a robust helper function for debugLog.
- * It automatically creates the sheet if it doesn't exist and uses LockService
- * to prevent race conditions from concurrent requests.
+ * It automatically creates the sheet if it doesn't exist, uses LockService
+ * to prevent race conditions, and now CLEARS LOGS OLDER THAN 7 DAYS.
  *
  * @param {string|object} message The message or object to log.
  * @param {string} [level='INFO'] The log level (e.g., INFO, DEBUG, ERROR).
@@ -46,18 +46,45 @@ function sheetLog(message, level = 'INFO') {
   lock.waitLock(15000); // Wait up to 15 seconds for other processes to finish.
 
   try {
-    const logSheetName = "DebugLogs";
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = ss.getSheetByName(logSheetName);
+    let sheet = ss.getSheetByName(SHEET_NAMES.DEBUG_LOGS);
 
     // If the log sheet doesn't exist, create it and add headers.
     if (!sheet) {
-      sheet = ss.insertSheet(logSheetName, 0); // Insert as the first sheet
+      sheet = ss.insertSheet(SHEET_NAMES.DEBUG_LOGS, 0); // Insert as the first sheet
       sheet.appendRow(['Timestamp', 'Level', 'Message']);
       sheet.setFrozenRows(1);
       sheet.getRange("A:A").setNumberFormat("yyyy-mm-dd hh:mm:ss");
       sheet.getRange("C:C").setWrap(true);
     }
+
+    // --- NEW: LOG DELETION LOGIC ---
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) { // Check if there are any logs to potentially delete
+        const range = sheet.getRange(`A2:A${lastRow}`);
+        const timestamps = range.getValues();
+        const now = new Date().getTime();
+        const sevenDaysInMillis = 7 * 24 * 60 * 60 * 1000;
+        let rowsToDelete = 0;
+
+        for (let i = 0; i < timestamps.length; i++) {
+            const logTime = new Date(timestamps[i][0]).getTime();
+            if ((now - logTime) > sevenDaysInMillis) {
+                rowsToDelete++;
+            } else {
+                // Since logs are appended chronologically, we can stop when we find a recent one.
+                break;
+            }
+        }
+
+        if (rowsToDelete > 0) {
+            // +1 because row indices are 1-based, and we start from row 2.
+            sheet.deleteRows(2, rowsToDelete);
+            Logger.log(`[sheetLog] Cleared ${rowsToDelete} old log entries.`);
+        }
+    }
+    // --- END: LOG DELETION LOGIC ---
+
 
     const timestamp = new Date();
     // If the message is an object (like 'e.postData'), stringify it for logging.

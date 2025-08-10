@@ -12,7 +12,7 @@
  */
 function doPost(e) {
   // Log a new entry to the sheet every time the function is called.
-  debugLog("doPost function triggered.", "INFO", true);
+  debugLog("doPost function triggered.", "DEBUG", true);
 
   const rawContent = e.postData ? e.postData.contents : 'No post data received.';
   
@@ -36,7 +36,7 @@ function doPost(e) {
       return ContentService.createTextOutput("Authentication Failed");
     }
     
-    debugLog("Webhook authenticated successfully.", "INFO");
+    debugLog("Webhook authenticated successfully.", "DEBUG");
 
     const stravaPayload = data.strava_payload;
     if (!stravaPayload) {
@@ -52,7 +52,7 @@ function doPost(e) {
     scriptProperties.setProperty(PROPERTY_KEYS.LAST_WEBHOOK_TIMESTAMP, new Date().getTime().toString());
     debugLog("Updated last webhook timestamp.", "DEBUG", true);
 
-    debugLog("doPost finished successfully. Returning 'Success'.", "INFO", true);
+    debugLog("doPost finished successfully. Returning 'Success'.", "DEBUG", true);
     return ContentService.createTextOutput("Success");
 
   } catch (error) {
@@ -98,7 +98,7 @@ function handleActivityEvent(aspect_type, owner_id, object_id) {
   switch (aspect_type) {
     case 'update':
       // For 'update', first delete the old record.
-      debugLog(`Update event for activity ${object_id}. Deleting existing entry.`, "INFO", true);
+      debugLog(`Update event for activity ${object_id}. Deleting existing entry.`, "DEBUG", true);
       SheetService.deleteObjectById(SHEET_NAMES.ACTIVITIES, object_id, 'id');
       // IMPORTANT: No 'break' here. We want to "fall through" to the 'create'
       // case to re-add the activity with its new data.

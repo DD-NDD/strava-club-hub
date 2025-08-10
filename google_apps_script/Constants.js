@@ -20,6 +20,7 @@ const SHEET_NAMES = {
   REGISTRATIONS: 'Registrations',
   CHALLENGES: 'Challenges',
   CHALLENGE_PARTICIPANTS: 'ChallengeParticipants',
+  DEBUG_LOGS: 'DebugLogs'
 };
 
 // An enumeration for column indices in the "Database" sheet for reliable access.
